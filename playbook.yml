@@ -1,0 +1,79 @@
+# Tested on Armbian 5.38
+# ansible-playbook -u root -k -i 192.168.0.111, playbook.yml
+---
+- hosts: all
+  tasks:
+  - name: Configure Armbian overlays
+    lineinfile:
+      path: /boot/armbianEnv.txt
+      line: \1 cir
+      regexp: ^(overlays=(?:(?!cir).)*)$
+      backrefs: yes
+  - name: Install required packages
+    package:
+      name:
+        - bluetooth
+        - bluez
+        - bluez-tools
+        - gstreamer1.0-alsa
+        - lirc
+        - mopidy
+        - pulseaudio
+        - pulseaudio-module-bluetooth
+        - python-cddb
+        - python-libdiscid
+        - python-pip
+        - python-setuptools
+        - python-wheel
+      state: latest
+  - name: Install additional Mopidy modules
+    pip:
+      name:
+        - git+https://github.com/forscher21/mopidy-cd#egg=mopidy-cd
+      state: latest
+  - name: Configure Pulseaudio service
+    block:
+      - user:
+          name: pulse
+          groups: bluetooth
+          append: yes
+      - lineinfile:
+          path: /etc/pulse/system.pa
+          line: load-module module-bluetooth-discover
+      # - ini_file:
+      #     path: /etc/bluetooth/audio.conf
+      #     section: General
+      #     option: Disable
+      #     value: Headset
+      - copy:
+          src: pulseaudio.service
+          dest: /etc/systemd/system/
+          owner: root
+          group: root
+          mode: 0644
+          force: yes
+      - systemd:
+          name: pulseaudio
+          enabled: yes
+          state: started
+          daemon_reload: yes
+  - name: Configure Mopidy
+    block:
+      - user:
+          name: mopidy
+          groups:
+            - cdrom
+            - pulse-access
+          append: yes
+      - ini_file:
+          path: /etc/mopidy/mopidy.conf
+          section: '{{ item.section }}'
+          option: '{{ item.option }}'
+          value: '{{ item.value }}'
+        with_items:
+          - { section: http, option: enabled, value: false }
+          - { section: mpd, option: hostname, value: 0.0.0.0 }
+      - service:
+          name: mopidy
+          enabled: yes
+          state: started

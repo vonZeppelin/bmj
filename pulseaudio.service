@@ -1,0 +1,10 @@
+[Unit]
+Description=PulseAudio Daemon
+
+[Service]
+Type=simple
+PrivateTmp=true
+ExecStart=/usr/bin/pulseaudio --system --realtime=false --disallow-exit --log-target=journal
+
+[Install]
+WantedBy=multi-user.target
