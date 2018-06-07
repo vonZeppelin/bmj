@@ -4,31 +4,31 @@
 - hosts: all
   tasks:
   - name: Configure Armbian overlays
-    lineinfile:
+    replace:
       path: /boot/armbianEnv.txt
-      line: \1 cir
       regexp: ^(overlays=(?:(?!cir).)*)$
-      backrefs: yes
+      replace: \1 cir
   - name: Install required packages
     package:
       name:
         - bluetooth
         - bluez
         - bluez-tools
+        - eject
         - gstreamer1.0-alsa
-        - lirc
+        - ir-keytable
+        - libdiscid0
         - mopidy
+        - mpc
         - pulseaudio
         - pulseaudio-module-bluetooth
         - python-cddb
-        - python-libdiscid
         - python-pip
-        - python-setuptools
-        - python-wheel
       state: latest
-  - name: Install additional Mopidy modules
+  - name: Install additional Python modules
     pip:
       name:
+        - inputexec
         - git+https://github.com/forscher21/mopidy-cd#egg=mopidy-cd
       state: latest
   - name: Configure Pulseaudio service
@@ -39,19 +39,17 @@
           append: yes
       - lineinfile:
           path: /etc/pulse/system.pa
-          line: load-module module-bluetooth-discover
-      # - ini_file:
-      #     path: /etc/bluetooth/audio.conf
-      #     section: General
-      #     option: Disable
-      #     value: Headset
+          line: 'load-module {{ item }}'
+        loop:
+          - module-bluetooth-discover
+          - module-bluetooth-policy
+          - module-switch-on-connect
       - copy:
           src: pulseaudio.service
           dest: /etc/systemd/system/
           owner: root
           group: root
           mode: 0644
-          force: yes
       - systemd:
           name: pulseaudio
           enabled: yes
@@ -70,10 +68,59 @@
           section: '{{ item.section }}'
           option: '{{ item.option }}'
           value: '{{ item.value }}'
-        with_items:
+        loop:
           - { section: http, option: enabled, value: false }
           - { section: mpd, option: hostname, value: 0.0.0.0 }
+      - copy:
+          src: online-radio.m3u
+          dest: /var/lib/mopidy/playlists
+          owner: mopidy
+          group: audio
+          mode: 0644
       - service:
           name: mopidy
           enabled: yes
           state: started
+  - name: Configure Remote Control
+    block:
+      - user:
+          name: inputexec
+          groups:
+            - input
+            - cdrom
+          create_home: no
+      - replace:
+          path: '{{ item.path }}'
+          regexp: '{{ item.regexp }}'
+          replace: '{{ item.replace }}'
+        loop:
+          - {
+            path: /lib/udev/rules.d/60-ir-keytable.rules,
+            replace: 'ACTION=="add", SUBSYSTEM=="input", SUBSYSTEMS=="rc", KERNEL=="event*", ENV{.rc_sysdev}="$id", RUN+="/usr/bin/ir-keytable -a /etc/rc_maps.cfg -s $env{.rc_sysdev}"',
+            regexp: ^.+name"$
+          }
+          - {
+            path: /etc/rc_maps.cfg,
+            replace: '* rc-empty tmih',
+            regexp: ^.+total_media_in_hand$
+          }
+      - copy:
+          src: '{{ item.src }}'
+          dest: '{{ item.dest }}'
+          owner: '{{ item.owner }}'
+          group: '{{ item.group }}'
+          mode: 0644
+        loop:
+          - { src: inputexec.service, dest: /etc/systemd/system/, owner: root, group: root }
+          - { src: inputexec.cfg, dest: /etc/inputexec.cfg, owner: inputexec, group: input }
+          - { src: tmih, dest: /etc/rc_keymaps/, owner: root, group: root }
+      - lineinfile:
+          path: /etc/sudoers.d/poweroff
+          line: inputexec ALL=(ALL) NOPASSWD: /sbin/poweroff
+          create: yes
+          mode: 0644
+      - systemd:
+          name: inputexec
+          enabled: yes
+          state: started
+          daemon_reload: yes

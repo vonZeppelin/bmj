@@ -1,0 +1,10 @@
+[Unit]
+Description=Inputexec Daemon
+
+[Service]
+Type=simple
+User=inputexec
+ExecStart=/usr/local/bin/inputexec --source-file=/dev/input/event0 --action-mode=run_async --action-commands=/etc/inputexec.cfg --logging-target=syslog
+
+[Install]
+WantedBy=multi-user.target
