@@ -19,17 +19,17 @@
         - ir-keytable
         - libdiscid0
         - mopidy
+        - mopidy-dleyna
         - mpc
         - pulseaudio
         - pulseaudio-module-bluetooth
-        - python-cddb
         - python-pip
       state: latest
   - name: Install additional Python modules
     pip:
       name:
         - inputexec
-        - git+https://github.com/forscher21/mopidy-cd#egg=mopidy-cd
+        - git+https://github.com/vonZeppelin/bmj#egg=mopidy-cd&subdirectory=mopidy-cd
       state: latest
   - name: Configure Pulseaudio service
     block:
@@ -69,7 +69,9 @@
           option: '{{ item.option }}'
           value: '{{ item.value }}'
         loop:
+          - { section: file, option: enabled, value: false }
           - { section: http, option: enabled, value: false }
+          - { section: local, option: enabled, value: false }
           - { section: mpd, option: hostname, value: 0.0.0.0 }
       - copy:
           src: online-radio.m3u
@@ -86,8 +88,8 @@
       - user:
           name: inputexec
           groups:
-            - input
             - cdrom
+            - input
           create_home: no
       - replace:
           path: '{{ item.path }}'

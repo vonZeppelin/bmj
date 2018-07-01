@@ -21,8 +21,8 @@ Vagrant.configure("2") do |config|
 
   config.vm.provision "shell", inline: <<-SHELL
       apt-get update
-      apt-get install -y git python-pip python-libdiscid python-cddb mopidy
-      pip install git+git://github.com/forscher21/mopidy-cd#egg=mopidy-cd
+      apt-get install -y git libdiscid0 mopidy python-pip
+      pip install git+https://github.com/vonZeppelin/bmj#egg=mopidy-cd&subdirectory=mopidy-cd
   SHELL
 
 end
