@@ -117,8 +117,8 @@
           - { src: inputexec.cfg, dest: /etc/inputexec.cfg, owner: inputexec, group: input }
           - { src: tmih, dest: /etc/rc_keymaps/, owner: root, group: root }
       - lineinfile:
-          path: /etc/sudoers.d/poweroff
-          line: inputexec ALL=(ALL) NOPASSWD: /sbin/poweroff
+          path: /etc/sudoers.d/inputexec
+          line: 'inputexec ALL= NOPASSWD: /bin/bash,/sbin/poweroff'
           create: yes
           mode: 0644
       - systemd:
