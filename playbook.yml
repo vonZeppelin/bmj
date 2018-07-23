@@ -29,7 +29,7 @@
     pip:
       name:
         - inputexec
-        - git+https://github.com/vonZeppelin/bmj#egg=mopidy-cd&subdirectory=mopidy-cd
+        - mopidy-cd
       state: latest
   - name: Configure Pulseaudio service
     block:
@@ -118,7 +118,7 @@
           - { src: tmih, dest: /etc/rc_keymaps/, owner: root, group: root }
       - lineinfile:
           path: /etc/sudoers.d/inputexec
-          line: 'inputexec ALL= NOPASSWD: /bin/bash,/sbin/poweroff'
+          line: 'inputexec ALL= NOPASSWD: /bin/bash'
           create: yes
           mode: 0644
       - systemd:

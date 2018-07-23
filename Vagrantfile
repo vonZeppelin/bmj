@@ -7,22 +7,29 @@ Vagrant.configure("2") do |config|
     vb.name = "mopidy-debug"
     vb.memory = "1024"
 
-    vb.customize ["modifyvm", :id, '--audio', "coreaudio", "--audiocontroller", "ac97"]
-    vb.customize ["modifyvm", :id, "--usb", "on"]
-    vb.customize ["modifyvm", :id, "--usbehci", "on"]
-    vb.customize [
-      "usbfilter", "add", "0",
-      "--target", :id,
-      "--name", "External DVD/RW",
-      "--vendorid", "0x152d",
-      "--productid", "0x2339"
-    ]
+    # vb.customize ["modifyvm", :id, '--audio', "coreaudio", "--audiocontroller", "ac97"]
+    # vb.customize ["modifyvm", :id, "--usb", "on"]
+    # vb.customize ["modifyvm", :id, "--usbehci", "on"]
+    # vb.customize [
+    #   "usbfilter", "add", "0",
+    #   "--target", :id,
+    #   "--name", "External DVD/RW",
+    #   "--vendorid", "0x152d",
+    #   "--productid", "0x2339"
+    # ]
+    # vb.customize [
+    #   "storageattach", :id,
+    #   "--storagectl", "SATA Controller",
+    #   "--port", "5",
+    #   "--type", "dvddrive",
+    #   "--medium", "disk.cue"
+    # ]
   end
 
   config.vm.provision "shell", inline: <<-SHELL
       apt-get update
       apt-get install -y git libdiscid0 mopidy python-pip
-      pip install git+https://github.com/vonZeppelin/bmj#egg=mopidy-cd&subdirectory=mopidy-cd
+      pip install mopidy-cd
   SHELL
 
 end
