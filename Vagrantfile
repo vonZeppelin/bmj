@@ -1,7 +1,8 @@
 Vagrant.configure("2") do |config|
   config.vm.box = "debian/stretch64"
   config.vm.box_check_update = false
-  config.vm.network "public_network", bridge: "en0: Wi-Fi (AirPort)"
+  config.vm.network "forwarded_port", guest: 6680, host: 6680
+  config.vm.network "forwarded_port", guest: 6600, host: 6600
 
   config.vm.provider "virtualbox" do |vb|
     vb.name = "mopidy-debug"
@@ -27,8 +28,8 @@ Vagrant.configure("2") do |config|
   end
 
   config.vm.provision "shell", inline: <<-SHELL
-      apt-get update
-      apt-get install -y git libdiscid0 mopidy python-pip
+      apt update
+      apt install -y git libdiscid0 mopidy python-pip
       pip install mopidy-cd
   SHELL
 
