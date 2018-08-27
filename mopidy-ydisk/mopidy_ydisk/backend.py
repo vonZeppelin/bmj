@@ -5,10 +5,9 @@ import logging
 import mutagen
 import pykka
 
-from datetime import timedelta
 from itertools import cycle
 
-from cachetools import TTLCache
+from cachetools import cachedmethod, func, TTLCache
 from furl import furl
 from mopidy import backend
 from mopidy.models import Album, Artist, Ref, Track
@@ -49,8 +48,7 @@ class TagsReader(pykka.ThreadingActor):
         super(TagsReader, self).__init__()
 
         tag_retrieving_concurrency = 5
-        cache_ttl = timedelta(hours=12).total_seconds()
-        self.cache = TTLCache(maxsize=1000, ttl=cache_ttl)
+        self.cache = TTLCache(maxsize=1000, ttl=24 * 60 * 60)
         self.tags_retriever_indexer = cycle(
             range(tag_retrieving_concurrency)
         )
@@ -67,17 +65,18 @@ class TagsReader(pykka.ThreadingActor):
     def on_receive(self, message):
         self.cache[message['file_uri']] = message['tags']
 
+    @cachedmethod(
+        cache=lambda self: self.cache, key=lambda self, file_uri, _: file_uri
+    )
     def read(self, file_uri, file_supplier):
-        tags = self.cache.get(file_uri)
-        if not tags:
-            logger.debug('No cached tags for file %s, reading...', file_uri)
-            tags_retriever_idx = next(self.tags_retriever_indexer)
-            tags_retriever_ref = self.tags_retrievers[tags_retriever_idx]
-            tags_retriever_ref.tell({
-                'file_uri': file_uri,
-                'file_supplier': file_supplier
-            })
-        return tags
+        logger.debug('No cached tags for file %s, reading...', file_uri)
+        tags_retriever_idx = next(self.tags_retriever_indexer)
+        tags_retriever_ref = self.tags_retrievers[tags_retriever_idx]
+        tags_retriever_ref.tell({
+            'file_uri': file_uri,
+            'file_supplier': file_supplier
+        })
+        return None
 
 
 class YDiskBackend(pykka.ThreadingActor, backend.Backend):
@@ -128,6 +127,7 @@ class YDiskLibrary(backend.LibraryProvider):
         self.init = init
         self.tags_reader = tags_reader
 
+    @func.ttl_cache(maxsize=1000, ttl=5 * 60)
     def browse(self, uri):
         if uri == ROOT_URI:
             return [
@@ -150,28 +150,21 @@ class YDiskLibrary(backend.LibraryProvider):
         )
         file_tags = file_tags_future.get()
         if file_tags:
+            get_tag = YDiskLibrary._get_tag(file_tags)
             return [
                 Track(
                     uri=uri,
-                    name=YDiskLibrary._get_tag(file_tags, 'title', file_name),
+                    name=get_tag('title', file_name),
                     artists=[
                         Artist(name=artist, sortname=artist)
                         for artist in file_tags.get('artist', ())
                     ],
-                    album=Album(
-                        name=YDiskLibrary._get_tag(file_tags, 'album')
-                    ),
-                    genre=YDiskLibrary._get_tag(file_tags, 'genre'),
-                    track_no=int(
-                        YDiskLibrary._get_tag(file_tags, 'tracknumber', 0)
-                    ),
-                    disc_no=int(
-                        YDiskLibrary._get_tag(file_tags, 'discnumber', 0)
-                    ),
-                    date=YDiskLibrary._get_tag(file_tags, 'date'),
-                    bitrate=int(
-                        YDiskLibrary._get_tag(file_tags, 'bpm', 0)
-                    )
+                    album=Album(name=get_tag('album')),
+                    genre=get_tag('genre'),
+                    track_no=int(get_tag('tracknumber', 0)),
+                    disc_no=int(get_tag('discnumber', 0)),
+                    date=get_tag('date'),
+                    bitrate=int(get_tag('bpm', 0))
                 )
             ]
         else:
@@ -180,18 +173,23 @@ class YDiskLibrary(backend.LibraryProvider):
     def dispose(self):
         for disc in itervalues(self.discs):
             disc.dispose()
+        self.browse.cache_clear()
 
     @staticmethod
-    def _get_tag(tags, tag_key, default='Unknown'):
-        return next(
-            iter(tags.get(tag_key) or ()), default
-        )
+    def _get_tag(tags):
+        def get_tag(tag_key, default='Unknown'):
+            return next(
+                iter(tags.get(tag_key) or ()),
+                default
+            )
+
+        return get_tag
 
     @staticmethod
     def _resource_coords(resource_uri):
         path = furl(resource_uri).path
-        name = path.segments[-1]
         disc_id = path.segments.pop(0)
+        name = path.segments[-1] if path.segments else ''
         return disc_id, name, '/'.join(path.segments) or '/'
 
     @staticmethod

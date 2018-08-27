@@ -6,7 +6,7 @@ Mopidy-YDisk
     :target: https://pypi.python.org/pypi/Mopidy-YDisk/
     :alt: Latest PyPI version
 
-`Mopidy <http://www.mopidy.com/>`_ extension for playing music from `Yandex.Disk <https://disk.yandex.ru/>`_.
+`Mopidy <http://www.mopidy.com/>`_ extension for playing music files from `Yandex.Disk <https://disk.yandex.ru/>`_.
 
 
 Installation
