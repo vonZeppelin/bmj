@@ -21,6 +21,7 @@ class Extension(ext.Extension):
 
     def get_config_schema(self):
         schema = super(Extension, self).get_config_schema()
+        schema['tags_retrieve_concurrency'] = config.Integer(minimum=0)
         schema['tokens'] = config.List(optional=True)
         return schema
 

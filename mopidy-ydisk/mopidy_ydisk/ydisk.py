@@ -61,13 +61,13 @@ class YDiskDirectory(object):
 
 class YDiskFile(object):
 
-    def __init__(self, name, path, file_path, session):
+    def __init__(self, session, file_path, name, path, size=-1):
+        self.file_path = file_path
         self.name = name
         self.path = path
-        self.file_path = file_path
-        self._session = session
         self._offset = 0
-        self._size = -1
+        self._session = session
+        self._size = size
 
     def read(self, count=-1):
         if count == 0:
@@ -157,7 +157,7 @@ class YDisk(object):
 
     def browse_dir(self, path):
         request_params = {
-            'fields': '_embedded.items.file,_embedded.items.media_type,_embedded.items.name,_embedded.items.path,_embedded.items.type',
+            'fields': '_embedded.items.file,_embedded.items.media_type,_embedded.items.name,_embedded.items.path,_embedded.items.size,_embedded.items.type',
             'limit': BROWSE_LIMIT,
             'path': path,
             'sort': 'name'
@@ -165,8 +165,7 @@ class YDisk(object):
 
         response = self._session.get('resources', params=request_params)
         if response.ok:
-            items = response.json()['_embedded']['items']
-            for item in items:
+            for item in response.json()['_embedded']['items']:
                 name = item['name']
                 path = item['path'].lstrip('disk:')
                 if item['type'] == 'dir':
@@ -175,17 +174,18 @@ class YDisk(object):
                     )
                 elif item['media_type'] == 'audio':
                     yield YDiskFile(
+                        session=self._session,
+                        file_path=item['file'],
                         name=name,
                         path=path,
-                        file_path=item['file'],
-                        session=self._session
+                        size=item['size']
                     )
         else:
             raise YDiskException.from_json(response.json())
 
     def get_file(self, path):
         request_params = {
-            'fields': 'name,file',
+            'fields': 'name,file,size',
             'path': path
         }
 
@@ -193,10 +193,11 @@ class YDisk(object):
         if response.ok:
             file_info = response.json()
             return YDiskFile(
+                session=self._session,
+                file_path=file_info['file'],
                 name=file_info['name'],
                 path=path,
-                file_path=file_info['file'],
-                session=self._session
+                size=file_info['size']
             )
         else:
             raise YDiskException.from_json(response.json())
