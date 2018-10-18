@@ -1,21 +1,24 @@
-# Tested on Armbian 5.38
+# Tested on Armbian 5.59
 # ansible-playbook -u root -k -i 192.168.0.111, playbook.yml
 ---
 - hosts: all
   tasks:
-  - name: Configure Armbian overlays
-    replace:
-      path: /boot/armbianEnv.txt
-      regexp: ^(overlays=(?:(?!cir).)*)$
-      replace: \1 cir
+  - name: Configure hardware
+    block:
+      - copy:
+          content: 'blacklist xradio_wlan'
+          dest: /etc/modprobe.d/blacklist-xradio.conf
+      - replace:
+          path: /boot/armbianEnv.txt
+          regexp: ^(overlays=(?:(?!cir).)*)$
+          replace: \1 cir
   - name: Install required packages
-    package:
+    apt:
       name:
-        - bluetooth
-        - bluez
         - bluez-tools
         - eject
         - gstreamer1.0-alsa
+        - gstreamer1.0-plugins-bad
         - ir-keytable
         - libdiscid0
         - mopidy
@@ -23,13 +26,18 @@
         - mpc
         - pulseaudio
         - pulseaudio-module-bluetooth
+        - python-dev
         - python-pip
+        - python-setuptools
       state: latest
+      update_cache: yes
+      cache_valid_time: 3600
   - name: Install additional Python modules
     pip:
       name:
         - inputexec
         - mopidy-cd
+        - mopidy-ydisk
       state: latest
   - name: Configure Pulseaudio service
     block:
@@ -45,7 +53,7 @@
           - module-bluetooth-policy
           - module-switch-on-connect
       - copy:
-          src: pulseaudio.service
+          src: conf/pulseaudio.service
           dest: /etc/systemd/system/
           owner: root
           group: root
@@ -74,7 +82,7 @@
           - { section: local, option: enabled, value: false }
           - { section: mpd, option: hostname, value: 0.0.0.0 }
       - copy:
-          src: online-radio.m3u
+          src: conf/online-radio.m3u
           dest: /var/lib/mopidy/playlists
           owner: mopidy
           group: audio
@@ -113,16 +121,37 @@
           group: '{{ item.group }}'
           mode: 0644
         loop:
-          - { src: inputexec.service, dest: /etc/systemd/system/, owner: root, group: root }
-          - { src: inputexec.cfg, dest: /etc/inputexec.cfg, owner: inputexec, group: input }
-          - { src: tmih, dest: /etc/rc_keymaps/, owner: root, group: root }
-      - lineinfile:
-          path: /etc/sudoers.d/inputexec
-          line: 'inputexec ALL= NOPASSWD: /bin/bash'
-          create: yes
+          - { src: conf/inputexec.service, dest: /etc/systemd/system/, owner: root, group: root }
+          - { src: conf/inputexec.cfg, dest: /etc/inputexec.cfg, owner: inputexec, group: input }
+          - { src: conf/tmih, dest: /etc/rc_keymaps/, owner: root, group: root }
+      - copy:
+          content: >
+            inputexec ALL= NOPASSWD: /bin/bash
+          dest: /etc/sudoers.d/inputexec
           mode: 0644
       - systemd:
           name: inputexec
+          enabled: yes
+          state: started
+          daemon_reload: yes
+  - name: Configure VirtualHere
+    block:
+      - get_url:
+          url: https://virtualhere.com/sites/default/files/usbserver/vhusbdarm
+          dest: /usr/bin/vhusbd
+          owner: root
+          group: root
+          mode: 0744
+      - copy:
+          src: '{{ item.src }}'
+          dest: '{{ item.dest }}'
+          owner: root
+          group: root
+        loop:
+          - { src: conf/virtualhere.service, dest: /etc/systemd/system/ }
+          - { src: conf/virtualhere.cfg, dest: /etc/virtualhere.cfg }
+      - systemd:
+          name: virtualhere
           enabled: yes
           state: started
           daemon_reload: yes
