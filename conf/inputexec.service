@@ -4,7 +4,7 @@ Description=Inputexec Daemon
 [Service]
 Type=simple
 User=inputexec
-ExecStart=/usr/local/bin/inputexec --action-commands=/etc/inputexec.cfg --action-jobs=3 --action-mode=run_async --logging-target=syslog --source-file=/dev/input/event0
+ExecStart=/usr/local/bin/inputexec --action-commands=/etc/inputexec.cfg --action-jobs=3 --action-mode=run_async --logging-target=syslog --source-file=/dev/input/
 
 [Install]
 WantedBy=multi-user.target

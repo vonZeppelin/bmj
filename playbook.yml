@@ -1,4 +1,4 @@
-# Tested on Armbian 5.59
+# Tested on Armbian 5.75 with 4.14 kernel
 # ansible-playbook -u root -k -i 192.168.0.111, playbook.yml
 ---
 - hosts: all
@@ -20,7 +20,6 @@
         - gstreamer1.0-alsa
         - gstreamer1.0-plugins-bad
         - ir-keytable
-        - libdiscid0
         - mopidy
         - mopidy-dleyna
         - mpc
@@ -37,6 +36,7 @@
       name:
         - inputexec
         - mopidy-cd
+        - mopidy-iris
         - mopidy-ydisk
       state: latest
   - name: Configure Pulseaudio service
@@ -77,16 +77,19 @@
           option: '{{ item.option }}'
           value: '{{ item.value }}'
         loop:
+          - { section: audio, option: mixer_volume, value: 30 }
           - { section: file, option: enabled, value: false }
-          - { section: http, option: enabled, value: false }
+          - { section: http, option: hostname, value: 0.0.0.0 }
           - { section: local, option: enabled, value: false }
           - { section: mpd, option: hostname, value: 0.0.0.0 }
       - copy:
-          src: conf/online-radio.m3u
-          dest: /var/lib/mopidy/playlists
+          src: '{{ item }}'
+          dest: /var/lib/mopidy/playlists/
           owner: mopidy
           group: audio
           mode: 0644
+        with_fileglob:
+          - conf/playlists/*.m3u
       - service:
           name: mopidy
           enabled: yes
