@@ -1,4 +1,4 @@
-# Tested on Armbian 5.75 with 4.14 kernel
+# Tested on Armbian 5.83 with 4.14 kernel
 # ansible-playbook -u root -k -i 192.168.0.111, playbook.yml
 ---
 - hosts: all
@@ -34,7 +34,7 @@
   - name: Install additional Python modules
     pip:
       name:
-        - inputexec
+        - https://github.com/vonZeppelin/inputexec/archive/master.zip
         - mopidy-cd
         - mopidy-iris
         - mopidy-ydisk
@@ -46,12 +46,13 @@
           groups: bluetooth
           append: yes
       - lineinfile:
-          path: /etc/pulse/system.pa
-          line: 'load-module {{ item }}'
+          path: '/etc/pulse/{{ item.file }}'
+          line: '{{ item.line }}'
         loop:
-          - module-bluetooth-discover
-          - module-bluetooth-policy
-          - module-switch-on-connect
+          - { file: daemon.conf, line: 'default-sample-format = s24le' }
+          - { file: system.pa, line: 'load-module module-bluetooth-discover' }
+          - { file: system.pa, line: 'load-module module-bluetooth-policy' }
+          - { file: system.pa, line: 'load-module module-switch-on-connect' }
       - copy:
           src: conf/pulseaudio.service
           dest: /etc/systemd/system/
@@ -82,6 +83,7 @@
           - { section: http, option: hostname, value: 0.0.0.0 }
           - { section: local, option: enabled, value: false }
           - { section: mpd, option: hostname, value: 0.0.0.0 }
+          - { section: stream, option: timeout, value: 15000 }
       - copy:
           src: '{{ item }}'
           dest: /var/lib/mopidy/playlists/

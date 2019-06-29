@@ -4,7 +4,7 @@ Description=PulseAudio Daemon
 [Service]
 Type=simple
 PrivateTmp=true
-ExecStart=/usr/bin/pulseaudio --disallow-exit --log-target=journal --realtime=false --system
+ExecStart=/usr/bin/pulseaudio --disallow-exit --log-target=journal --realtime=false --resample-method=soxr-vhq --system
 
 [Install]
 WantedBy=multi-user.target

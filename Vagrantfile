@@ -29,7 +29,7 @@ Vagrant.configure("2") do |config|
 
   config.vm.provision "shell", inline: <<-SHELL
       apt update
-      apt install -y git libdiscid0 mopidy python-pip
+      apt install -y git mopidy python-pip
       pip install mopidy-cd mopidy-ydisk
   SHELL
 
