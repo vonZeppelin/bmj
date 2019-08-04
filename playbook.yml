@@ -1,7 +1,8 @@
-# Tested on Armbian 5.83 with 4.14 kernel
-# ansible-playbook -u root -k -i 192.168.0.111, playbook.yml
+# Tested on Armbian Buster 5.93 with custom kernel
+# ansible-playbook -k -i 192.168.0.111, playbook.yml
 ---
 - hosts: all
+  user: root
   tasks:
   - name: Configure hardware
     block:
@@ -12,6 +13,27 @@
           path: /boot/armbianEnv.txt
           regexp: ^(overlays=(?:(?!cir).)*)$
           replace: \1 cir
+  - name: Configure time sync
+    block:
+      - apt:
+          name: ntp
+          state: absent
+          purge: yes
+      - service:
+          name: systemd-timesyncd
+          state: started
+  - name: Add Mopidy repo
+    block:
+      - apt_key:
+          url: https://apt.mopidy.com/mopidy.gpg
+          state: present
+      - apt_repository:
+          repo: '{{ item.repo }}'
+          state: present
+          filename: mopidy
+        loop:
+          - { repo: 'deb http://apt.mopidy.com/ buster main contrib non-free' }
+          - { repo: 'deb-src http://apt.mopidy.com/ buster main contrib non-free' }
   - name: Install required packages
     apt:
       name:
@@ -36,7 +58,7 @@
       name:
         - https://github.com/vonZeppelin/inputexec/archive/master.zip
         - mopidy-cd
-        - mopidy-iris
+        - mopidy-mobile
         - mopidy-ydisk
       state: latest
   - name: Configure Pulseaudio service
@@ -49,7 +71,12 @@
           path: '/etc/pulse/{{ item.file }}'
           line: '{{ item.line }}'
         loop:
+          - { file: daemon.conf, line: 'allow-exit = no' }
+          - { file: daemon.conf, line: 'avoid-resampling = yes' }
           - { file: daemon.conf, line: 'default-sample-format = s24le' }
+          - { file: daemon.conf, line: 'log-target = journal' }
+          - { file: daemon.conf, line: 'realtime-scheduling = no' }
+          - { file: daemon.conf, line: 'resample-method = soxr-vhq' }
           - { file: system.pa, line: 'load-module module-bluetooth-discover' }
           - { file: system.pa, line: 'load-module module-bluetooth-policy' }
           - { file: system.pa, line: 'load-module module-switch-on-connect' }
@@ -78,10 +105,11 @@
           option: '{{ item.option }}'
           value: '{{ item.value }}'
         loop:
-          - { section: audio, option: mixer_volume, value: 30 }
+          - { section: audio, option: mixer_volume, value: 20 }
           - { section: file, option: enabled, value: false }
           - { section: http, option: hostname, value: 0.0.0.0 }
           - { section: local, option: enabled, value: false }
+          - { section: local-images, option: enabled, value: false }
           - { section: mpd, option: hostname, value: 0.0.0.0 }
           - { section: stream, option: timeout, value: 15000 }
       - copy:
@@ -105,20 +133,18 @@
             - input
           create_home: no
       - replace:
-          path: '{{ item.path }}'
-          regexp: '{{ item.regexp }}'
-          replace: '{{ item.replace }}'
-        loop:
-          - {
-            path: /lib/udev/rules.d/60-ir-keytable.rules,
-            replace: 'ACTION=="add", SUBSYSTEM=="input", SUBSYSTEMS=="rc", KERNEL=="event*", ENV{.rc_sysdev}="$id", RUN+="/usr/bin/ir-keytable -a /etc/rc_maps.cfg -s $env{.rc_sysdev}"',
-            regexp: ^.+name"$
-          }
-          - {
-            path: /etc/rc_maps.cfg,
-            replace: '* rc-empty tmih',
-            regexp: ^.+total_media_in_hand$
-          }
+          path: /lib/udev/rules.d/60-ir-keytable.rules
+          regexp: ^.+name"$
+          replace: 'ACTION=="add", SUBSYSTEM=="input", SUBSYSTEMS=="rc", KERNEL=="event*", ENV{.rc_sysdev}="$id", RUN+="/usr/bin/ir-keytable -a /etc/rc_maps.cfg -s $env{.rc_sysdev}"'
+      - lineinfile:
+          path: /etc/rc_maps.cfg
+          line: sunxi-ir rc-empty total_media_in_hand_02.toml
+      - file:
+          src: /lib/udev/rc_keymaps/total_media_in_hand_02.toml
+          dest: /etc/rc_keymaps/total_media_in_hand_02.toml
+          owner: root
+          group: root
+          state: link
       - copy:
           src: '{{ item.src }}'
           dest: '{{ item.dest }}'
@@ -128,7 +154,6 @@
         loop:
           - { src: conf/inputexec.service, dest: /etc/systemd/system/, owner: root, group: root }
           - { src: conf/inputexec.cfg, dest: /etc/inputexec.cfg, owner: inputexec, group: input }
-          - { src: conf/tmih, dest: /etc/rc_keymaps/, owner: root, group: root }
       - copy:
           content: >
             inputexec ALL= NOPASSWD: /bin/bash
