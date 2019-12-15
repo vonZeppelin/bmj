@@ -3,7 +3,7 @@ Bogan's Media Jukebox
 
 A Mopidy-based media player built from sh*t and bricks.
 
-![](https://soteriawellness.com/wp-content/uploads/2018/05/demo-image-300x300.jpg)
+<img src="bmj.jpg" width=800>
 
 
 Features
