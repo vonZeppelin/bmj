@@ -37,15 +37,16 @@
   - name: Install required packages
     apt:
       name:
-        - bluez-tools
-        - eject
+        - bluez-tools=2.0~*
+        - eject=2.1.*
         - gstreamer1.0-alsa
         - gstreamer1.0-plugins-bad
-        - ir-keytable
-        - mopidy
-        - mopidy-dleyna
-        - mpc
-        - pulseaudio
+        - ir-keytable=1.16.*
+        - mopidy=3.0.*
+        - mopidy-dleyna=2.0.*
+        - mopidy-mpd=3.0.*
+        - mpc=0.31-*
+        - pulseaudio=12.2-*
         - pulseaudio-module-bluetooth
         - python-dev
         - python-pip
@@ -56,11 +57,12 @@
   - name: Install additional Python modules
     pip:
       name:
-        - https://github.com/vonZeppelin/inputexec/archive/master.zip
-        - mopidy-cd
-        - mopidy-mobile
-        - mopidy-ydisk
+        - https://github.com/vonZeppelin/inputexec/archive/13be691.zip
+        - https://github.com/vonZeppelin/mopidy-cd/archive/04b9dfa.zip
+        - mopidy-mobile~=1.9
+        - mopidy-ydisk~=0.2
       state: latest
+      executable: pip3
   - name: Configure Pulseaudio service
     block:
       - user:
@@ -107,9 +109,8 @@
         loop:
           - { section: audio, option: mixer_volume, value: 20 }
           - { section: file, option: enabled, value: false }
+          - { section: http, option: default_app, value: mobile }
           - { section: http, option: hostname, value: 0.0.0.0 }
-          - { section: local, option: enabled, value: false }
-          - { section: local-images, option: enabled, value: false }
           - { section: mpd, option: hostname, value: 0.0.0.0 }
           - { section: stream, option: timeout, value: 15000 }
       - copy:
