@@ -3,6 +3,9 @@
 ---
 - hosts: all
   user: root
+  vars_prompt:
+    - name: icecast_password
+      prompt: "Define Icecast password"
   tasks:
   - name: Configure hardware
     block:
@@ -41,6 +44,7 @@
         - eject=2.1.*
         - gstreamer1.0-alsa
         - gstreamer1.0-plugins-bad
+        - icecast2=2.4.*
         - ir-keytable=1.16.*
         - mopidy=3.0.*
         - mopidy-dleyna=2.0.*
@@ -93,6 +97,36 @@
           enabled: yes
           state: started
           daemon_reload: yes
+  - name: Configure Icecast2
+    block:
+      - copy:
+          src: '{{ item }}'
+          dest: /usr/share/icecast2/web/
+          owner: icecast2
+          group: icecast
+          mode: 0644
+        with_fileglob:
+          - conf/silence.*
+      - xml:
+          path: /etc/icecast2/icecast.xml
+          xpath: '/icecast/{{ item.key }}'
+          value: '{{ item.value }}'
+          pretty_print: yes
+        with_dict:
+          location: BMJ
+          admin: bmj@bmj.org
+          limits/clients: 5
+          authentication/source-password: '{{ icecast_password }}'
+          authentication/relay-password: '{{ icecast_password }}'
+          authentication/admin-password: '{{ icecast_password }}'
+          hostname: mybmj.duckdns.org
+          mount/mount-name: /bmj.mp3
+          mount/fallback-mount: /silence.mp3
+          mount/fallback-override: 1
+      - service:
+          name: icecast2
+          enabled: yes
+          state: started
   - name: Configure Mopidy
     block:
       - user:
@@ -108,6 +142,12 @@
           value: '{{ item.value }}'
         loop:
           - { section: audio, option: mixer_volume, value: 20 }
+          - section: audio
+            option: output
+            value: >-
+              tee name=t !
+              queue ! autoaudiosink t. !
+              queue ! lamemp3enc target=quality quality=0 ! shout2send streamname=bmj description=bmj mount=bmj.mp3 password={{ icecast_password }} async=false
           - { section: file, option: enabled, value: false }
           - { section: http, option: default_app, value: mobile }
           - { section: http, option: hostname, value: 0.0.0.0 }
