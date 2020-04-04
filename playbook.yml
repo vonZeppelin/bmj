@@ -40,7 +40,6 @@
   - name: Install required packages
     apt:
       name:
-        - bluez-tools=2.0~*
         - eject=2.1.*
         - gstreamer1.0-alsa
         - gstreamer1.0-plugins-bad
@@ -170,6 +169,7 @@
       - user:
           name: inputexec
           groups:
+            - bluetooth
             - cdrom
             - input
           create_home: no
@@ -191,10 +191,11 @@
           dest: '{{ item.dest }}'
           owner: '{{ item.owner }}'
           group: '{{ item.group }}'
-          mode: 0644
+          mode: '{{ item.mode }}'
         loop:
-          - { src: conf/inputexec.service, dest: /etc/systemd/system/, owner: root, group: root }
-          - { src: conf/inputexec.cfg, dest: /etc/inputexec.cfg, owner: inputexec, group: input }
+          - { src: conf/inputexec.service, dest: /etc/systemd/system/, owner: root, group: root, mode: 644 }
+          - { src: conf/inputexec.cfg, dest: /etc/inputexec.cfg, owner: inputexec, group: input, mode: 644 }
+          - { src: conf/dev_rot.py, dest: /etc/dev_rot.py, owner: inputexec, group: input, mode: 744 }
       - copy:
           content: >
             inputexec ALL= NOPASSWD: /bin/bash
