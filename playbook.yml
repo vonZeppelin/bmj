@@ -31,12 +31,12 @@
           url: https://apt.mopidy.com/mopidy.gpg
           state: present
       - apt_repository:
-          repo: '{{ item.repo }}'
+          repo: '{{ item }}'
           state: present
           filename: mopidy
         loop:
-          - { repo: 'deb http://apt.mopidy.com/ buster main contrib non-free' }
-          - { repo: 'deb-src http://apt.mopidy.com/ buster main contrib non-free' }
+          - deb http://apt.mopidy.com/ buster main contrib non-free
+          - deb-src http://apt.mopidy.com/ buster main contrib non-free
   - name: Install required packages
     apt:
       name:
@@ -51,6 +51,7 @@
         - mpc=0.31-*
         - pulseaudio=12.2-*
         - pulseaudio-module-bluetooth
+        - pulseaudio-module-raop
         - python-dev
         - python-pip
         - python-setuptools
@@ -72,19 +73,25 @@
           name: pulse
           groups: bluetooth
           append: yes
-      - lineinfile:
+      - blockinfile:
           path: '/etc/pulse/{{ item.file }}'
-          line: '{{ item.line }}'
+          marker: '{{ item.marker }}'
+          block: '{{ item.block }}'
         loop:
-          - { file: daemon.conf, line: 'allow-exit = no' }
-          - { file: daemon.conf, line: 'avoid-resampling = yes' }
-          - { file: daemon.conf, line: 'default-sample-format = s24le' }
-          - { file: daemon.conf, line: 'log-target = journal' }
-          - { file: daemon.conf, line: 'realtime-scheduling = no' }
-          - { file: daemon.conf, line: 'resample-method = soxr-vhq' }
-          - { file: system.pa, line: 'load-module module-bluetooth-discover' }
-          - { file: system.pa, line: 'load-module module-bluetooth-policy' }
-          - { file: system.pa, line: 'load-module module-switch-on-connect' }
+          - file: daemon.conf
+            marker: '; {mark} MANAGED BLOCK'
+            block: |
+              allow-exit = no
+              avoid-resampling = yes
+              log-target = journal
+              realtime-scheduling = no
+              resample-method = soxr-vhq
+          - file: system.pa
+            marker: '# {mark} MANAGED BLOCK'
+            block: |
+              load-module module-bluetooth-discover
+              load-module module-raop-discover
+              load-module module-switch-on-connect
       - copy:
           src: conf/pulseaudio.service
           dest: /etc/systemd/system/
@@ -194,8 +201,8 @@
           mode: '{{ item.mode }}'
         loop:
           - { src: conf/inputexec.service, dest: /etc/systemd/system/, owner: root, group: root, mode: 644 }
-          - { src: conf/inputexec.cfg, dest: /etc/inputexec.cfg, owner: inputexec, group: input, mode: 644 }
-          - { src: conf/dev_rot.py, dest: /etc/dev_rot.py, owner: inputexec, group: input, mode: 744 }
+          - { src: conf/inputexec.cfg, dest: /etc/inputexec/inputexec.cfg, owner: inputexec, group: input, mode: 644 }
+          - { src: conf/dev_rot.py, dest: /etc/inputexec/dev_rot.py, owner: inputexec, group: input, mode: 744 }
       - copy:
           content: >
             inputexec ALL= NOPASSWD: /bin/bash
