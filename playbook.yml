@@ -67,7 +67,7 @@
         - mopidy-ydisk~=0.2
       state: latest
       executable: pip3
-  - name: Configure Pulseaudio service
+  - name: Configure Pulseaudio
     block:
       - user:
           name: pulse
@@ -103,7 +103,7 @@
           enabled: yes
           state: started
           daemon_reload: yes
-  - name: Configure Icecast2
+  - name: Configure Icecast
     block:
       - copy:
           src: '{{ item }}'
@@ -112,7 +112,7 @@
           group: icecast
           mode: 0644
         with_fileglob:
-          - conf/silence.*
+          - conf/icecast/silence.*
       - xml:
           path: /etc/icecast2/icecast.xml
           xpath: '/icecast/{{ item.key }}'
@@ -194,15 +194,15 @@
           group: root
           state: link
       - copy:
-          src: '{{ item.src }}'
+          src: 'conf/inputexec/{{ item.src }}'
           dest: '{{ item.dest }}'
           owner: '{{ item.owner }}'
           group: '{{ item.group }}'
           mode: '{{ item.mode }}'
         loop:
-          - { src: conf/inputexec.service, dest: /etc/systemd/system/, owner: root, group: root, mode: 644 }
-          - { src: conf/inputexec.cfg, dest: /etc/inputexec/inputexec.cfg, owner: inputexec, group: input, mode: 644 }
-          - { src: conf/dev_rot.py, dest: /etc/inputexec/dev_rot.py, owner: inputexec, group: input, mode: 744 }
+          - { src: inputexec.service, dest: /etc/systemd/system/, owner: root, group: root, mode: 644 }
+          - { src: inputexec.cfg, dest: /etc/inputexec/inputexec.cfg, owner: inputexec, group: input, mode: 644 }
+          - { src: dev_rot.py, dest: /etc/inputexec/dev_rot.py, owner: inputexec, group: input, mode: 744 }
       - copy:
           content: >
             inputexec ALL= NOPASSWD: /bin/bash
@@ -222,13 +222,13 @@
           group: root
           mode: 0744
       - copy:
-          src: '{{ item.src }}'
+          src: 'conf/virtualhere/{{ item.src }}'
           dest: '{{ item.dest }}'
           owner: root
           group: root
         loop:
-          - { src: conf/virtualhere.service, dest: /etc/systemd/system/ }
-          - { src: conf/virtualhere.cfg, dest: /etc/virtualhere.cfg }
+          - { src: virtualhere.service, dest: /etc/systemd/system/ }
+          - { src: virtualhere.cfg, dest: /etc/virtualhere.cfg }
       - systemd:
           name: virtualhere
           enabled: yes
