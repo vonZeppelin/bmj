@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width,initial-scale=1">
+    <title>BMJ Index</title>
+    <link rel="stylesheet" href="https://unpkg.com/chota@0.7.2">
+    <style>
+      :root {
+        --font-size: 2rem;
+      }
+
+      .control-panel {
+        flex: 1;
+        flex-direction: column;
+      }
+
+      .hero {
+        display: flex;
+      }
+
+      .links {
+        list-style: none;
+      }
+
+      .links li:before {
+        content: '\1F517';
+        margin-left: -20px;
+        margin-right: 5px;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="container">
+      <div class="hero is-full-screen">
+        <div class="control-panel is-center is-vertical-align">
+          <div class="card">
+            <h2>Available services</h2>
+            <ul class="links">
+              <li>
+                <a href="http://{{ bmj_domain }}:8000" target="_blank">Icecast</a>
+              </li>
+              <li>
+                <a href="/mobile" target="_blank">Mopidy</a>
+              </li>
+              <li>
+                <a href="/pia" target="_blank">PIA VPN</a>
+              </li>
+              <li>
+                <a href="/transmission" target="_blank">Transmission</a>
+              </li>
+            </ul>
+          </div>
+        </div>
+      </div>
+    </div>
+  </body>
+</html>

@@ -3,9 +3,11 @@
 ---
 - hosts: all
   user: root
+  vars:
+    bmj_domain: mybmj.duckdns.org
   vars_prompt:
     - name: icecast_password
-      prompt: "Define Icecast password"
+      prompt: "Icecast password"
   tasks:
   - name: Configure hardware
     block:
@@ -40,11 +42,14 @@
   - name: Install required packages
     apt:
       name:
+        - certbot=0.31.*
         - eject=2.1.*
         - gstreamer1.0-alsa
         - gstreamer1.0-plugins-bad
         - icecast2=2.4.*
         - ir-keytable=1.16.*
+        - lighttpd-1.4.*
+        - lighttpd-mod-authn-pam
         - mopidy=3.0.*
         - mopidy-dleyna=2.0.*
         - mopidy-mpd=3.0.*
@@ -103,6 +108,42 @@
           enabled: yes
           state: started
           daemon_reload: yes
+  - name: Configure Lighttpd
+    block:
+      - user:
+          name: www-data
+          groups: shadow
+          append: yes
+      - template:
+          src: 'conf/lighttpd/{{ item.src }}'
+          dest: '{{ item.dest }}'
+          mode: '{{ item.mode }}'
+        loop:
+          - src: http.pam
+            dest: /etc/pam.d/http
+            mode: 644
+          - src: index.html
+            dest: /var/www/html
+            mode: 644
+          - src: reload-lighttpd.sh
+            dest: /etc/letsencrypt/renewal-hooks/deploy/
+            mode: 744
+      - template:
+          src: '{{ item }}'
+          dest: /etc/lighttpd/conf-enabled/
+          owner: root
+          mode: 0400
+        with_fileglob:
+          - conf/lighttpd/*.conf
+      - shell: >-
+          certbot certonly --agree-tos --noninteractive
+          --email leonid_bogdanov@mail.ru
+          --webroot --webroot-path /var/www/html/
+          --domain {{ bmj_domain }}
+      - service:
+          name: lighttpd
+          enabled: yes
+          state: started
   - name: Configure Icecast
     block:
       - copy:
@@ -120,12 +161,12 @@
           pretty_print: yes
         with_dict:
           location: BMJ
-          admin: bmj@bmj.org
+          admin: 'admin@{{ bmj_domain }}'
           limits/clients: 5
           authentication/source-password: '{{ icecast_password }}'
           authentication/relay-password: '{{ icecast_password }}'
           authentication/admin-password: '{{ icecast_password }}'
-          hostname: mybmj.duckdns.org
+          hostname: '{{ bmj_domain }}'
           mount/mount-name: /bmj.mp3
           mount/fallback-mount: /silence.mp3
           mount/fallback-override: 1
