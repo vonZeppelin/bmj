@@ -92,9 +92,6 @@
       - copy:
           src: conf/pulseaudio.service
           dest: /etc/systemd/system/
-          owner: root
-          group: root
-          mode: 0644
       - systemd:
           name: pulseaudio
           enabled: yes
@@ -119,21 +116,18 @@
       - template:
           src: 'conf/lighttpd/{{ item.src }}'
           dest: '{{ item.dest }}'
-          mode: '{{ item.mode }}'
+          mode: '{{ item.mode | default(omit) }}'
         loop:
           - src: http.pam
             dest: /etc/pam.d/http
-            mode: 644
           - src: index.html
             dest: /var/www/html
-            mode: 644
           - src: reload-lighttpd.sh
             dest: /etc/letsencrypt/renewal-hooks/deploy/
             mode: 744
       - template:
           src: '{{ item }}'
           dest: /etc/lighttpd/conf-enabled/
-          owner: root
           mode: 0400
         with_fileglob:
           - conf/lighttpd/*.conf
@@ -148,7 +142,6 @@
           dest: /usr/share/icecast2/web/
           owner: icecast2
           group: icecast
-          mode: 0644
         with_fileglob:
           - conf/icecast/silence.*
       - xml:
@@ -203,7 +196,6 @@
           dest: /var/lib/mopidy/m3u/
           owner: mopidy
           group: audio
-          mode: 0644
         with_fileglob:
           - conf/playlists/*.m3u
       - service:
@@ -229,24 +221,21 @@
       - file:
           src: /lib/udev/rc_keymaps/total_media_in_hand_02.toml
           dest: /etc/rc_keymaps/total_media_in_hand_02.toml
-          owner: root
-          group: root
           state: link
       - copy:
           src: 'conf/inputexec/{{ item.src }}'
           dest: '{{ item.dest }}'
-          owner: '{{ item.owner }}'
-          group: '{{ item.group }}'
-          mode: '{{ item.mode }}'
+          owner: '{{ item.owner | default(omit) }}'
+          group: '{{ item.group | default(omit) }}'
+          mode: '{{ item.mode | default(omit) }}'
         loop:
-          - { src: inputexec.service, dest: /etc/systemd/system/, owner: root, group: root, mode: 644 }
-          - { src: inputexec.cfg, dest: /etc/inputexec/, owner: inputexec, group: input, mode: 644 }
+          - { src: inputexec.service, dest: /etc/systemd/system/ }
+          - { src: inputexec.cfg, dest: /etc/inputexec/, owner: inputexec, group: input }
           - { src: dev_rot.py, dest: /etc/inputexec/, owner: inputexec, group: input, mode: 744 }
       - copy:
           content: >
             inputexec ALL= NOPASSWD: /bin/bash
           dest: /etc/sudoers.d/inputexec
-          mode: 0644
       - systemd:
           name: inputexec
           enabled: yes
@@ -257,14 +246,10 @@
       - get_url:
           url: https://virtualhere.com/sites/default/files/usbserver/vhusbdarm
           dest: /usr/bin/vhusbd
-          owner: root
-          group: root
           mode: 0744
       - copy:
           src: 'conf/virtualhere/{{ item.src }}'
           dest: '{{ item.dest }}'
-          owner: root
-          group: root
         loop:
           - { src: virtualhere.service, dest: /etc/systemd/system/ }
           - { src: virtualhere.cfg, dest: /etc/virtualhere.cfg }
