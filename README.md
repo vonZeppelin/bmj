@@ -19,7 +19,7 @@ Features
     * IR remote control.
     * MPD client, e.g. [M.A.L.P.](https://gitlab.com/gateship-one/malp)
     * Any other client supported by Mopidy.
-* Outputs audio via analog and Bluetooth connections, potentially supports AirPlay and S/PDIF.
+* Outputs audio via analog and Bluetooth connections, AirPlay and potentially supports S/PDIF.
 
 
 Hardware
@@ -38,4 +38,4 @@ Software
 * [Armbian](https://www.armbian.com/) for Orange Pi Zero.
 * Mopidy with extensions.
 
-Installation and configuration are done using Ansible script.
+Installation and configuration are done using Ansible playbook.

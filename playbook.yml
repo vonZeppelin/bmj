@@ -1,9 +1,10 @@
-# Tested on Armbian Buster 5.93 with custom kernel
+# Tested on Armbian Buster 20.05.1
 # ansible-playbook -k -i 192.168.0.111, playbook.yml
 ---
 - hosts: all
   user: root
   vars:
+    ansible_python_interpreter: python3
     bmj_domain: mybmj.duckdns.org
   vars_prompt:
     - name: icecast_password
@@ -18,15 +19,6 @@
           path: /boot/armbianEnv.txt
           regexp: ^(overlays=(?:(?!cir).)*)$
           replace: \1 cir
-  - name: Configure time sync
-    block:
-      - apt:
-          name: ntp
-          state: absent
-          purge: yes
-      - service:
-          name: systemd-timesyncd
-          state: started
   - name: Add Mopidy repo
     block:
       - apt_key:
@@ -48,8 +40,8 @@
         - gstreamer1.0-plugins-bad
         - icecast2=2.4.*
         - ir-keytable=1.16.*
-        - lighttpd-1.4.*
-        - lighttpd-mod-authn-pam
+        - lighttpd=1.4.*
+        - lighttpd-mod-authn-pam=1.4.*
         - mopidy=3.0.*
         - mopidy-dleyna=2.0.*
         - mopidy-mpd=3.0.*
@@ -57,10 +49,10 @@
         - pulseaudio=12.2-*
         - pulseaudio-module-bluetooth
         - pulseaudio-module-raop
-        - python-dev
-        - python-pip
-        - python-setuptools
-      state: latest
+        - python3-dev
+        - python3-lxml # required for XML manipulation by Ansible
+        - python3-pip
+        - python3-setuptools
       update_cache: yes
       cache_valid_time: 3600
   - name: Install additional Python modules
@@ -108,12 +100,22 @@
           enabled: yes
           state: started
           daemon_reload: yes
+  - pause:
+      prompt: "Make sure DDNS record and firewall rule have up-to-date IP address!"
   - name: Configure Lighttpd
     block:
       - user:
           name: www-data
           groups: shadow
           append: yes
+      - service:
+          name: lighttpd
+          state: started
+      - shell: >-
+          certbot certonly --agree-tos --noninteractive
+          --email leonid_bogdanov@mail.ru
+          --webroot --webroot-path /var/www/html/
+          --domain {{ bmj_domain }}
       - template:
           src: 'conf/lighttpd/{{ item.src }}'
           dest: '{{ item.dest }}'
@@ -135,15 +137,10 @@
           mode: 0400
         with_fileglob:
           - conf/lighttpd/*.conf
-      - shell: >-
-          certbot certonly --agree-tos --noninteractive
-          --email leonid_bogdanov@mail.ru
-          --webroot --webroot-path /var/www/html/
-          --domain {{ bmj_domain }}
       - service:
           name: lighttpd
           enabled: yes
-          state: started
+          state: restarted
   - name: Configure Icecast
     block:
       - copy:
@@ -167,6 +164,7 @@
           authentication/relay-password: '{{ icecast_password }}'
           authentication/admin-password: '{{ icecast_password }}'
           hostname: '{{ bmj_domain }}'
+          listen-socket/bind-address: ::
           mount/mount-name: /bmj.mp3
           mount/fallback-mount: /silence.mp3
           mount/fallback-override: 1
@@ -202,7 +200,7 @@
           - { section: stream, option: timeout, value: 15000 }
       - copy:
           src: '{{ item }}'
-          dest: /var/lib/mopidy/playlists/
+          dest: /var/lib/mopidy/m3u/
           owner: mopidy
           group: audio
           mode: 0644
@@ -242,8 +240,8 @@
           mode: '{{ item.mode }}'
         loop:
           - { src: inputexec.service, dest: /etc/systemd/system/, owner: root, group: root, mode: 644 }
-          - { src: inputexec.cfg, dest: /etc/inputexec/inputexec.cfg, owner: inputexec, group: input, mode: 644 }
-          - { src: dev_rot.py, dest: /etc/inputexec/dev_rot.py, owner: inputexec, group: input, mode: 744 }
+          - { src: inputexec.cfg, dest: /etc/inputexec/, owner: inputexec, group: input, mode: 644 }
+          - { src: dev_rot.py, dest: /etc/inputexec/, owner: inputexec, group: input, mode: 744 }
       - copy:
           content: >
             inputexec ALL= NOPASSWD: /bin/bash
