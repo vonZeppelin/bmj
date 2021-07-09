@@ -68,9 +68,9 @@ _NamedValue = namedtuple("_NamedValue", "name value")
 Time = namedtuple("Time", "m s f")
 Index = namedtuple("Index", "num time")
 Track = namedtuple("Track", "num title indices")
-File = namedtuple("File", "path format tracks")
+File = namedtuple("File", "path tracks")
 CueSheet = namedtuple(
-    "CueSheet", "title performer date genre catalog discid comments files"
+    "CueSheet", "title performer date genre files"
 )
 
 class _CueSheetVisitor(PTNodeVisitor):
@@ -101,40 +101,35 @@ class _CueSheetVisitor(PTNodeVisitor):
     def visit_track(self, node, children):
         return Track(
             num=children[0],
-            title=next(v for k, v in children.cdtext if k == "TITLE"),
+            title=next(
+                (v for k, v in children.cdtext if k == "TITLE"),
+                "Unknown"
+            ),
             indices=children.track_index
         )
 
     def visit_file_statement(self, node, children):
-        path, fmt, *tracks = children
-        return File(path, fmt, tracks)
+        path, _, *tracks = children
+        return File(path, tracks)
 
     def visit_cue_file(self, node, children):
-        title = "Unknown"
-        performer = "Unknown"
         date = None
-        genre = "Other"
-        catalog = None
-        discid = None
-        comments = []
+        genre = None
+        performer = "Unknown"
+        title = "Unknown"
 
         for name, value in children.global_statement:
-            if name == "TITLE":
-                title = value
-            elif name == "PERFORMER":
-                performer = value
+            if name == "DATE":
+                date = value
             elif name == "GENRE":
                 genre = value
-            elif name == "CATALOG" or name == "UPC_EAN":
-                catalog = value
-            elif name == "DISCID":
-                discid = value
-            elif name == "COMMENT":
-                comments.append(value)
+            elif name == "PERFORMER":
+                performer = value
+            elif name == "TITLE":
+                title = value
 
         return CueSheet(
-            title, performer, date, genre, catalog,
-            discid, comments, children.file_statement
+            title, performer, date, genre, children.file_statement
         )
 
 
