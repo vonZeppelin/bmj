@@ -6,6 +6,13 @@ from ffmpy import FFmpeg
 from invoke import Exit, task
 from itertools import zip_longest
 from pathlib import Path
+from shlex import quote
+
+
+ALLOWED_TAGS = {
+    "album", "artist", "date", "genre",
+    "title", "tracknumber", "tracktotal"
+}
 
 
 def _error(msg): print(f"\033[33m{msg}\033[0m")
@@ -14,6 +21,71 @@ def _error(msg): print(f"\033[33m{msg}\033[0m")
 def _ff_time(idx_time):
     ms = (idx_time.m * 60 + idx_time.s + idx_time.f / 75.0) * 1000
     return f"{ms:.2f}ms"
+
+
+def _shq(path): return quote(str(path))
+
+
+@task(
+    help={
+        "in-dir": "Root directory to start traversal from"
+    }
+)
+def clean_tags(ctx, in_dir):
+    """
+    Traverses directories and removes images and
+    not allowlisted tags from .flac files.
+
+    Requires metaflac to be installed.
+    """
+
+    in_dir = Path(in_dir)
+
+    if not in_dir.is_dir():
+        raise Exit(message=f"'{in_dir}' is not valid directory!")
+
+    for cur_dir, _, files in os.walk(in_dir):
+        print(f"Scanning '{cur_dir}'...", end=" ")
+
+        flac_files = [
+            f for f in map(Path, files) if f.suffix.casefold() == ".flac"
+        ]
+
+        if not flac_files:
+            print("No flac files found.")
+            continue
+
+        for cur_file in flac_files:
+            print(f"\n\tFound '{cur_file}', processing...", end=" ")
+
+            cur_file = _shq(cur_dir / cur_file)
+
+            exported_tags = ctx.run(
+                f"metaflac --export-tags-to - {cur_file}",
+                hide=True
+            )
+            exported_tags = {
+                kv[0].lower(): kv[1]
+                for kv in (
+                    t.split("=", 1) for t in exported_tags.stdout.split("\n")
+                )
+                if len(kv) == 2
+            }
+
+            ctx.run(
+                f"metaflac --dont-use-padding --remove-all {cur_file}",
+            )
+
+            new_tags = " ".join(
+                f"--set-tag {k}={_shq(v)}"
+                for k, v in exported_tags.items()
+                if k in ALLOWED_TAGS
+            )
+            ctx.run(
+                f"metaflac --dont-use-padding {new_tags} {cur_file}"
+            )
+
+            print("OK.", end="")
 
 
 @task(
