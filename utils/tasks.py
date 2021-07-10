@@ -1,10 +1,7 @@
-import os
-
-from concurrent.futures import ThreadPoolExecutor, wait
 from cue_parser import parse_cue_sheet
-from ffmpy import FFmpeg
 from invoke import Exit, task
 from itertools import zip_longest
+from os import walk
 from pathlib import Path
 from shlex import quote
 
@@ -15,12 +12,7 @@ ALLOWED_TAGS = {
 }
 
 
-def _error(msg): print(f"\033[33m{msg}\033[0m")
-
-
-def _ff_time(idx_time):
-    ms = (idx_time.m * 60 + idx_time.s + idx_time.f / 75.0) * 1000
-    return f"{ms:.2f}ms"
+def _error(msg, **kwargs): print(f"\033[33m{msg}\033[0m", **kwargs)
 
 
 def _shq(path): return quote(str(path))
@@ -44,7 +36,7 @@ def clean_tags(ctx, in_dir):
     if not in_dir.is_dir():
         raise Exit(message=f"'{in_dir}' is not valid directory!")
 
-    for cur_dir, _, files in os.walk(in_dir):
+    for cur_dir, _, files in walk(in_dir):
         print(f"Scanning '{cur_dir}'...", end=" ")
 
         flac_files = [
@@ -102,6 +94,10 @@ def split(ctx, in_dir, out_dir):
     Requires FFmpeg to be installed.
     """
 
+    def _ff_time(idx_time):
+        ms = (idx_time.m * 60 + idx_time.s + idx_time.f / 75.0) * 1000
+        return f"{ms:.2f}ms"
+
     in_dir, out_dir = Path(in_dir), Path(out_dir)
 
     if not in_dir.is_dir():
@@ -109,7 +105,7 @@ def split(ctx, in_dir, out_dir):
     if out_dir.is_dir() and any(out_dir.iterdir()):
         raise Exit(message=f"'{out_dir}' is not empty directory!")
 
-    for cur_dir, _, files in os.walk(in_dir):
+    for cur_dir, _, files in walk(in_dir):
         print(f"Scanning '{cur_dir}'...", end=" ")
 
         cue_files = [
@@ -142,14 +138,12 @@ def split(ctx, in_dir, out_dir):
 
             tracks = cue_sheet.files[0].tracks
             print(
-                f"\tSplitting '{audio_file.name}' FILE into {len(tracks)} tracks...",
+                f"\tSplitting '{audio_file.name}' into {len(tracks)} tracks...",
                 end=" "
             )
 
-            with ThreadPoolExecutor() as executor:
-                futures = []
+            def _helper():
                 for track, next_track in zip_longest(tracks, tracks[1:]):
-                    out_file = cur_out_dir / f"{track.num:02d} {track.title}.flac"
                     track_start = next(i.time for i in track.indices if i.num == 1)
                     track_end = next_track.indices[0].time if next_track else None
                     track_tags = [
@@ -161,28 +155,24 @@ def split(ctx, in_dir, out_dir):
                         ("tracknumber", track.num),
                         ("tracktotal", len(tracks))
                     ]
-                    out_file_args = [
-                        "-map_metadata", "-1",
-                        "-compression_level", "8",
-                        "-ss", _ff_time(track_start)
-                    ]
+
+                    out_file_args = f"-map_metadata -1 -ss {_ff_time(track_start)}"
                     if track_end:
-                        out_file_args += ["-to", _ff_time(track_end)]
+                        out_file_args += f" -to {_ff_time(track_end)}"
                     for k, v in track_tags:
                         if v:
-                            out_file_args += ["-metadata", f"{k}={v}"]
+                            out_file_args += f" -metadata {k}={_shq(v)}"
 
-                    def _helper():
-                        ff = FFmpeg(
-                            global_options="-loglevel error",
-                            inputs={audio_file: None},
-                            outputs={out_file: out_file_args}
-                        )
-                        ff.run()
-                        print("*", end="")
+                    out_file = cur_out_dir / f"{track.num:02d}. {track.title}.flac"
+                    yield ctx.run(
+                        f"ffmpeg -hide_banner -i {_shq(audio_file)} {out_file_args} {_shq(out_file)}",
+                        asynchronous=True, warn=True
+                    )
 
-                    futures.append(executor.submit(_helper))
-
-                wait(futures)
+            for promise in list(_helper()):
+                if promise.join().ok:
+                    print("*", end="")
+                else:
+                    _error("*", end="")
 
             print(" OK.")
