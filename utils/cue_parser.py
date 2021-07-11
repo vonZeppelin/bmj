@@ -1,6 +1,6 @@
+from arpeggio import *
 from collections import namedtuple
 from functools import partial
-from arpeggio import *
 
 
 def quoted_string(): return RegExMatch(r"(['\"]).*\1")

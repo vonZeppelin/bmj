@@ -7,8 +7,7 @@ from shlex import quote
 
 
 ALLOWED_TAGS = {
-    "album", "artist", "date", "genre",
-    "title", "tracknumber", "tracktotal"
+    "album", "artist", "date", "genre", "title", "tracknumber", "tracktotal"
 }
 
 
@@ -37,14 +36,14 @@ def clean_tags(ctx, in_dir):
         raise Exit(message=f"'{in_dir}' is not valid directory!")
 
     for cur_dir, _, files in walk(in_dir):
-        print(f"Scanning '{cur_dir}'...", end=" ")
+        print(f"Scanning '{cur_dir}'...", end="")
 
         flac_files = [
             f for f in map(Path, files) if f.suffix.casefold() == ".flac"
         ]
 
         if not flac_files:
-            print("No flac files found.")
+            print(" No flac files found.")
             continue
 
         for cur_file in flac_files:
@@ -53,8 +52,7 @@ def clean_tags(ctx, in_dir):
             cur_file = _shq(cur_dir / cur_file)
 
             exported_tags = ctx.run(
-                f"metaflac --export-tags-to - {cur_file}",
-                hide=True
+                f"metaflac --export-tags-to - {cur_file}", hide=True
             )
             exported_tags = {
                 kv[0].lower(): kv[1]
@@ -64,9 +62,7 @@ def clean_tags(ctx, in_dir):
                 if len(kv) == 2
             }
 
-            ctx.run(
-                f"metaflac --dont-use-padding --remove-all {cur_file}",
-            )
+            ctx.run(f"metaflac --dont-use-padding --remove-all {cur_file}")
 
             new_tags = " ".join(
                 f"--set-tag {k}={_shq(v)}"
@@ -94,9 +90,12 @@ def split(ctx, in_dir, out_dir):
     Requires FFmpeg to be installed.
     """
 
-    def _ff_time(idx_time):
+    def ff_time(idx_time):
         ms = (idx_time.m * 60 + idx_time.s + idx_time.f / 75.0) * 1000
         return f"{ms:.2f}ms"
+
+    def first_index(track):
+        return track and next(i.time for i in track.indices if i.num == 1)
 
     in_dir, out_dir = Path(in_dir), Path(out_dir)
 
@@ -106,14 +105,14 @@ def split(ctx, in_dir, out_dir):
         raise Exit(message=f"'{out_dir}' is not empty directory!")
 
     for cur_dir, _, files in walk(in_dir):
-        print(f"Scanning '{cur_dir}'...", end=" ")
+        print(f"Scanning '{cur_dir}'...", end="")
 
         cue_files = [
             f for f in map(Path, files) if f.suffix.casefold() == ".cue"
         ]
 
         if not cue_files:
-            print("No cue sheets found.")
+            print(" No cue sheets found.")
             continue
 
         for cue_file in cue_files:
@@ -142,10 +141,10 @@ def split(ctx, in_dir, out_dir):
                 end=" "
             )
 
-            def _helper():
+            def helper():
                 for track, next_track in zip_longest(tracks, tracks[1:]):
-                    track_start = next(i.time for i in track.indices if i.num == 1)
-                    track_end = next_track.indices[0].time if next_track else None
+                    track_start = first_index(track)
+                    track_end = first_index(next_track)
                     track_tags = [
                         ("album", cue_sheet.title),
                         ("artist", cue_sheet.performer),
@@ -156,9 +155,9 @@ def split(ctx, in_dir, out_dir):
                         ("tracktotal", len(tracks))
                     ]
 
-                    out_file_args = f"-map_metadata -1 -ss {_ff_time(track_start)}"
+                    out_file_args = f"-map_metadata -1 -ss {ff_time(track_start)}"
                     if track_end:
-                        out_file_args += f" -to {_ff_time(track_end)}"
+                        out_file_args += f" -to {ff_time(track_end)}"
                     for k, v in track_tags:
                         if v:
                             out_file_args += f" -metadata {k}={_shq(v)}"
@@ -169,10 +168,10 @@ def split(ctx, in_dir, out_dir):
                         asynchronous=True, warn=True
                     )
 
-            for promise in list(_helper()):
+            for promise in list(helper()):
                 if promise.join().ok:
-                    print("*", end="")
+                    print("*", end="", flush=True)
                 else:
-                    _error("*", end="")
+                    _error("*", end="", flush=True)
 
             print(" OK.")
