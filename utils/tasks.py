@@ -1,7 +1,9 @@
+import os
+
 from cue_parser import parse_cue_sheet
+from hashlib import sha1
 from invoke import Exit, task
 from itertools import zip_longest
-from os import walk
 from pathlib import Path
 from shlex import quote
 
@@ -35,7 +37,7 @@ def clean_tags(ctx, in_dir):
     if not in_dir.is_dir():
         raise Exit(message=f"'{in_dir}' is not valid directory!")
 
-    for cur_dir, _, files in walk(in_dir):
+    for cur_dir, _, files in os.walk(in_dir):
         print(f"Scanning '{cur_dir}'...", end="")
 
         flac_files = [
@@ -46,8 +48,9 @@ def clean_tags(ctx, in_dir):
             print(" No flac files found.")
             continue
 
+        print()
         for cur_file in flac_files:
-            print(f"\n\tFound '{cur_file}', processing...", end=" ")
+            print(f"\tFound '{cur_file}', processing...", end=" ")
 
             cur_file = _shq(cur_dir / cur_file)
 
@@ -73,16 +76,17 @@ def clean_tags(ctx, in_dir):
                 f"metaflac --dont-use-padding {new_tags} {cur_file}"
             )
 
-            print("OK.", end="")
+            print("OK.")
 
 
 @task(
     help={
         "in-dir": "Root directory to start traversal from",
-        "out-dir": "Output directory (hierarchy of input dir is preserved)"
+        "out-dir": "Output directory (hierarchy of input dir is preserved)",
+        "checksum": "Generate SHA1 checksum file, in sha1deep compatible form"
     }
 )
-def split(ctx, in_dir, out_dir):
+def split_files(ctx, in_dir, out_dir, checksum=False):
     """
     Traverses directories and splits audio files
     into multiple tracks using found cue sheets.
@@ -104,7 +108,8 @@ def split(ctx, in_dir, out_dir):
     if out_dir.is_dir() and any(out_dir.iterdir()):
         raise Exit(message=f"'{out_dir}' is not empty directory!")
 
-    for cur_dir, _, files in walk(in_dir):
+    hashes = []
+    for cur_dir, _, files in os.walk(in_dir):
         print(f"Scanning '{cur_dir}'...", end="")
 
         cue_files = [
@@ -115,8 +120,9 @@ def split(ctx, in_dir, out_dir):
             print(" No cue sheets found.")
             continue
 
+        print()
         for cue_file in cue_files:
-            print(f"\n\tFound '{cue_file}' sheet, parsing...", end=" ")
+            print(f"\tFound '{cue_file}' sheet, parsing...", end=" ")
 
             cue_file = Path(cur_dir, cue_file)
             cue_sheet = parse_cue_sheet(cue_file)
@@ -141,37 +147,48 @@ def split(ctx, in_dir, out_dir):
                 end=" "
             )
 
-            def helper():
-                for track, next_track in zip_longest(tracks, tracks[1:]):
-                    track_start = first_index(track)
-                    track_end = first_index(next_track)
-                    track_tags = [
-                        ("album", cue_sheet.title),
-                        ("artist", cue_sheet.performer),
-                        ("date", cue_sheet.date),
-                        ("genre", cue_sheet.genre),
-                        ("title", track.title),
-                        ("tracknumber", track.num),
-                        ("tracktotal", len(tracks))
-                    ]
+            for track, next_track in zip_longest(tracks, tracks[1:]):
+                track_start = first_index(track)
+                track_end = first_index(next_track)
+                track_tags = [
+                    ("album", cue_sheet.title),
+                    ("artist", cue_sheet.performer),
+                    ("date", cue_sheet.date),
+                    ("genre", cue_sheet.genre),
+                    ("title", track.title),
+                    ("tracknumber", track.num),
+                    ("tracktotal", len(tracks))
+                ]
 
-                    out_file_args = f"-map_metadata -1 -ss {ff_time(track_start)}"
-                    if track_end:
-                        out_file_args += f" -to {ff_time(track_end)}"
-                    for k, v in track_tags:
-                        if v:
-                            out_file_args += f" -metadata {k}={_shq(v)}"
+                out_file_args = f"-map_metadata -1 -ss {ff_time(track_start)}"
+                if track_end:
+                    out_file_args += f" -to {ff_time(track_end)}"
+                for k, v in track_tags:
+                    if v:
+                        out_file_args += f" -metadata {k}={_shq(v)}"
+                out_file = cur_out_dir / f"{track.num:02d}. {track.title}.flac"
 
-                    out_file = cur_out_dir / f"{track.num:02d}. {track.title}.flac"
-                    yield ctx.run(
-                        f"ffmpeg -hide_banner -i {_shq(audio_file)} {out_file_args} {_shq(out_file)}",
-                        asynchronous=True, warn=True
-                    )
-
-            for promise in list(helper()):
-                if promise.join().ok:
+                split_result = ctx.run(
+                    f"ffmpeg -hide_banner -i {_shq(audio_file)} {out_file_args} {_shq(out_file)}",
+                    hide=True, warn=True
+                )
+                if split_result.ok:
+                    if checksum:
+                        hasher = sha1()
+                        with open(out_file, "rb") as f:
+                            while chunk := f.read(8192):
+                                hasher.update(chunk)
+                        hashes.append(
+                            (hasher.hexdigest(), out_file.relative_to(out_dir))
+                        )
                     print("*", end="", flush=True)
                 else:
                     _error("*", end="", flush=True)
 
             print(" OK.")
+
+    if hashes:
+        with open(out_dir / "checksum.sha1", "w") as f:
+            for sha1hash, file in hashes:
+                f.write(f"{sha1hash}  {os.curdir}{os.sep}{file}\n")
+        print("Checksum file created.")
