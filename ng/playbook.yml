@@ -1,0 +1,19 @@
+# Tested on Fedora Workstation 33
+# ansible-playbook -k -i 192.168.0.101, playbook.yml
+---
+- hosts: all
+  user: lbogdanov
+  vars:
+    ansible_python_interpreter: python3
+  tasks:
+  - name: Add additional repos
+    block:
+      - name: Enable RPM Fusion repositories
+        dnf:
+          name: '{{ item }}'
+          state: present
+        with_items:
+          - http://download1.rpmfusion.org/free/fedora/rpmfusion-free-release-{{ ansible_distribution_major_version }}.noarch.rpm
+          - http://download1.rpmfusion.org/nonfree/fedora/rpmfusion-nonfree-release-{{ ansible_distribution_major_version }}.noarch.rpm
+      - name: Enable Flathub repository
+        command: flatpak remote-add --if-not-exists flathub https://flathub.org/repo/flathub.flatpakrepo

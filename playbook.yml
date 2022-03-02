@@ -13,8 +13,10 @@
   - name: Configure hardware
     block:
       - copy:
-          content: 'blacklist xradio_wlan'
-          dest: /etc/modprobe.d/blacklist-xradio.conf
+          content: |
+            blacklist lima
+            blacklist xradio_wlan
+          dest: /etc/modprobe.d/blacklist-devices.conf
       - replace:
           path: /boot/armbianEnv.txt
           regexp: ^(overlays=(?:(?!cir).)*)$
@@ -207,8 +209,6 @@
       - user:
           name: inputexec
           groups:
-            - bluetooth
-            - cdrom
             - input
           create_home: no
       - replace:
