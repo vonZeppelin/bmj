@@ -1,7 +1,8 @@
+import csv
 import os
+import tempfile
 
 from cue_parser import parse_cue_sheet
-from hashlib import sha1
 from invoke import Exit, task
 from itertools import chain, zip_longest
 from pathlib import Path
@@ -85,11 +86,10 @@ def clean_tags(ctx, in_dir):
 @task(
     help={
         "in-dir": "Root directory to start traversal from",
-        "out-dir": "Output directory (hierarchy of input dir is preserved)",
-        "checksum": "Generate SHA1 checksum file, in sha1deep compatible form"
+        "out-dir": "Output directory (hierarchy of input dir is preserved)"
     }
 )
-def split_files(ctx, in_dir, out_dir, checksum=False):
+def split_files(ctx, in_dir, out_dir):
     """
     Traverses directories and splits audio files
     into multiple tracks using found cue sheets.
@@ -111,7 +111,6 @@ def split_files(ctx, in_dir, out_dir, checksum=False):
     if out_dir.is_dir() and any(out_dir.iterdir()):
         raise Exit(message=f"'{out_dir}' is not empty directory!")
 
-    hashes = []
     for cur_dir, _, files in os.walk(in_dir):
         print(f"Scanning '{cur_dir}'...", end="")
 
@@ -153,20 +152,20 @@ def split_files(ctx, in_dir, out_dir, checksum=False):
             for track, next_track in zip_longest(tracks, tracks[1:]):
                 track_start = first_index(track)
                 track_end = first_index(next_track)
-                track_tags = [
-                    ("album", cue_sheet.title),
-                    ("artist", cue_sheet.performer),
-                    ("date", cue_sheet.date),
-                    ("genre", cue_sheet.genre),
-                    ("title", track.title),
-                    ("tracknumber", track.num),
-                    ("tracktotal", len(tracks))
-                ]
+                track_tags = {
+                    "album": cue_sheet.title,
+                    "artist": cue_sheet.performer,
+                    "date": cue_sheet.date,
+                    "genre": cue_sheet.genre,
+                    "title": track.title,
+                    "tracknumber": track.num,
+                    "tracktotal": len(tracks)
+                }
 
                 out_file_args = f"-map_metadata -1 -ss {ff_time(track_start)}"
                 if track_end:
                     out_file_args += f" -to {ff_time(track_end)}"
-                for k, v in track_tags:
+                for k, v in track_tags.items():
                     if v:
                         out_file_args += f" -metadata {k}={_shq(v)}"
                 out_file = cur_out_dir / f"{track.num:02d}. {track.title}.flac"
@@ -176,25 +175,12 @@ def split_files(ctx, in_dir, out_dir, checksum=False):
                     hide=True, warn=True
                 )
                 if split_result.ok:
-                    if checksum:
-                        hasher = sha1()
-                        with open(out_file, "rb") as f:
-                            while chunk := f.read(8192):
-                                hasher.update(chunk)
-                        hashes.append(
-                            (hasher.hexdigest(), out_file.relative_to(out_dir))
-                        )
                     print("*", end="", flush=True)
                 else:
                     _error("*", end="", flush=True)
 
             print(" OK.")
 
-    if hashes:
-        with open(out_dir / "checksum.sha1", "w") as f:
-            for sha1hash, file in hashes:
-                f.write(f"{sha1hash}  {os.curdir}{os.sep}{file}\n")
-        print("Checksum file created.")
 
 @task(
     help={
@@ -245,7 +231,7 @@ def random_tracks(ctx, in_dir, out_dir, limit=100):
         f"Converting {len(audio_files)} audio files...", end=" "
     )
 
-    convert_args = "-c:a aac_at -q:a 5"
+    convert_args = "-codec:a aac_at -q:a 5"
 
     for idx, audio_file in enumerate(audio_files, start=1):
         out_file = Path(out_dir, f"Track {idx}.m4a")
@@ -259,3 +245,55 @@ def random_tracks(ctx, in_dir, out_dir, limit=100):
             _error("*", end="", flush=True)
 
     print(" OK.")
+
+
+@task(
+    help={
+        "youtube-url": "YouTube URL",
+        "tracks-info": "CSV file with tracks data",
+        "blank": "Blank media before burning"
+    }
+)
+def burn_youtube(ctx, youtube_url, tracks_info, blank=False):
+    """
+    Burns Audio CD from a YouTube video.
+
+    Requires FFmpeg and yt-dlp to be installed.
+    """
+
+    def index_time(time):
+        sec = 0
+        for part in time.split(":", maxsplit=2):
+            sec = sec * 60 + int(part, 10)
+        return f"{(sec // 60):02d}:{(sec % 60):02d}:00"
+
+    tracks_info = Path(tracks_info)
+
+    if not tracks_info.is_file():
+        raise Exit(message=f"'{tracks_info}' is not valid tracks info file!")
+
+    with tempfile.TemporaryDirectory() as tmp_dir:
+        print(f"Working directory is {tmp_dir}")
+        with ctx.cd(tmp_dir):
+            ctx.run(
+                f"yt-dlp --format bestaudio --output audiotrack {_shq(youtube_url)}"
+            )
+            ctx.run(
+                f"ffmpeg -hide_banner -i audiotrack -codec:a pcm_s16le -ar 44100 -ac 2 audiotrack.wav"
+            )
+
+            cue_file = [
+                "TITLE Youtube",
+                "PERFORMER Various",
+                "FILE audiotrack.wav WAVE"
+            ]
+            with open(tracks_info) as tracks_file:
+                for track in (tracks := csv.DictReader(tracks_file)):
+                    cue_file.append(f"  TRACK {(tracks.line_num - 1):02d} AUDIO")
+                    cue_file.append(f"    TITLE \"{track['Track']}\"")
+                    cue_file.append(f"    PERFORMER \"{track['Artist']}\"")
+                    cue_file.append(f"    INDEX 01 {index_time(track['Time'])}")
+            Path(tmp_dir, "audiotrack.cue").write_text("\n".join(cue_file))
+            if blank:
+                ctx.run("cdrecord blank=fast")
+            ctx.run("cdrecord -audio -dao -pad -text cuefile=audiotrack.cue")

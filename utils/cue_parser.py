@@ -90,10 +90,8 @@ class _CueSheetVisitor(PTNodeVisitor):
 
     def visit_rem(self, node, children):
         first, *rest = children
-        if rest:
-            return _NamedValue(first, " ".join(rest))
-        else:
-            return _NamedValue("COMMENT", first)
+        return _NamedValue(first, " ".join(rest)) if rest \
+            else _NamedValue("COMMENT", first)
 
     def visit_track_index(self, node, children):
         return Index(*children)
@@ -119,14 +117,15 @@ class _CueSheetVisitor(PTNodeVisitor):
         title = "Unknown"
 
         for name, value in children.global_statement:
-            if name == "DATE":
-                date = value
-            elif name == "GENRE":
-                genre = value
-            elif name == "PERFORMER":
-                performer = value
-            elif name == "TITLE":
-                title = value
+            match name:
+                case "DATE":
+                    date = value
+                case "GENRE":
+                    genre = value
+                case "PERFORMER":
+                    performer = value
+                case "TITLE":
+                    title = value
 
         return CueSheet(
             title, performer, date, genre, children.file_statement
