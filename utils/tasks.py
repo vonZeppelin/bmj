@@ -193,7 +193,7 @@ def split_files(ctx, in_dir, out_dir):
 def random_tracks(ctx, in_dir, out_dir, limit=100):
     """
     Given a list of directories, traverses directories and converts
-    found audio files into MP4 format.
+    found audio files into MP3 format.
 
     Requires FFmpeg to be installed.
     """
@@ -231,10 +231,10 @@ def random_tracks(ctx, in_dir, out_dir, limit=100):
         f"Converting {len(audio_files)} audio files...", end=" "
     )
 
-    convert_args = "-codec:a aac_at -q:a 5"
+    convert_args = "-codec:a libmp3lame -q:a 0"
 
     for idx, audio_file in enumerate(audio_files, start=1):
-        out_file = Path(out_dir, f"Track {idx}.m4a")
+        out_file = out_dir / f"Track {idx}.mp3"
         convert_result = ctx.run(
             f"ffmpeg -hide_banner -i {_shq(audio_file)} {convert_args} {_shq(out_file)}",
             hide=True, warn=True
