@@ -8,6 +8,7 @@ from itertools import chain, zip_longest
 from pathlib import Path
 from random import shuffle
 from shlex import quote
+from textwrap import dedent
 
 
 ALLOWED_TAGS = {
@@ -250,36 +251,41 @@ def random_tracks(ctx, in_dir, out_dir, limit=100):
 @task(
     help={
         "youtube-url": "YouTube URL",
-        "tracks-info": "CSV file with tracks data",
+        "tracks-info": "CSV file with tracks data. If omitted, YouTube audio is split into tracks",
         "blank": "Blank media before burning"
     }
 )
-def burn_youtube(ctx, youtube_url, tracks_info, blank=False):
+def burn_youtube(ctx, youtube_url, tracks_info=None, blank=False):
     """
     Burns Audio CD from a YouTube video.
 
     Requires FFmpeg and yt-dlp to be installed.
     """
 
+    # 700MB CD audio duration
+    eighty_min = 80 * 60
+
     def index_time(time):
+        time = str(time)
         sec = 0
         for part in time.split(":", maxsplit=2):
-            sec = sec * 60 + int(part, 10)
+            sec = sec * 60 + int(part)
         return f"{(sec // 60):02d}:{(sec % 60):02d}:00"
 
-    tracks_info = Path(tracks_info)
-
-    if not tracks_info.is_file():
-        raise Exit(message=f"'{tracks_info}' is not valid tracks info file!")
+    if tracks_info is not None:
+        tracks_info = Path(tracks_info)
+        if not tracks_info.is_file():
+            raise Exit(message=f"'{tracks_info}' is not valid tracks info file!")
 
     with tempfile.TemporaryDirectory() as tmp_dir:
         print(f"Working directory is {tmp_dir}")
+
         with ctx.cd(tmp_dir):
             ctx.run(
-                f"yt-dlp --format bestaudio --output audiotrack {_shq(youtube_url)}"
+                f"yt-dlp --print-to-file '%(duration)d' duration --format bestaudio --output audiotrack {_shq(youtube_url)}"
             )
             ctx.run(
-                f"ffmpeg -hide_banner -i audiotrack -codec:a pcm_s16le -ar 44100 -ac 2 audiotrack.wav"
+                f"ffmpeg -hide_banner -t {eighty_min} -i audiotrack -codec:a pcm_s16le -ar 44100 -ac 2 audiotrack.wav"
             )
 
             cue_file = [
@@ -287,13 +293,31 @@ def burn_youtube(ctx, youtube_url, tracks_info, blank=False):
                 "PERFORMER Various",
                 "FILE audiotrack.wav WAVE"
             ]
-            with open(tracks_info) as tracks_file:
-                for track in (tracks := csv.DictReader(tracks_file)):
-                    cue_file.append(f"  TRACK {(tracks.line_num - 1):02d} AUDIO")
-                    cue_file.append(f"    TITLE \"{track['Track']}\"")
-                    cue_file.append(f"    PERFORMER \"{track['Artist']}\"")
-                    cue_file.append(f"    INDEX 01 {index_time(track['Time'])}")
+            if tracks_info:
+                with open(tracks_info) as tracks_file:
+                    for track in (tracks := csv.DictReader(tracks_file)):
+                        cue_file_lines = f"""
+                          TRACK {(tracks.line_num - 1):02d} AUDIO
+                            TITLE \"{track['Track']}\"
+                            PERFORMER \"{track['Artist']}\"
+                            INDEX 01 {index_time(track['Time'])}
+                        """
+                        cue_file.append(dedent(cue_file_lines.strip('\n')))
+            else:
+                audio_duration = min(
+                    int(Path(tmp_dir, "duration").read_text()), eighty_min
+                )
+                # split audio into 8min tracks
+                for track_num, track_time in enumerate(range(0, audio_duration, 8 * 60), start=1):
+                    cue_file_lines = f"""
+                      TRACK {track_num:02d} AUDIO"
+                        TITLE \"Unknown track\"
+                        PERFORMER \"Unknown artist\"
+                        INDEX 01 {index_time(track_time)}
+                    """
+                    cue_file.append(dedent(cue_file_lines.strip('\n')))
             Path(tmp_dir, "audiotrack.cue").write_text("\n".join(cue_file))
+
             if blank:
                 ctx.run("cdrecord blank=fast")
             ctx.run("cdrecord -audio -dao -pad -text cuefile=audiotrack.cue")
